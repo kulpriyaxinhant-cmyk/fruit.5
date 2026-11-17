@@ -1,0 +1,323 @@
+
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Fruit Detector</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 20px;
+  font-family: Arial, sans-serif;
+  background: linear-gradient(135deg,#e8f5e9,#b9e6c5);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.container {
+  width: 100%;
+  max-width: 500px;
+  background: white;
+  padding: 25px;
+  border-radius: 22px;
+  text-align: center;
+  box-shadow: 0 8px 30px #0002;
+}
+
+h1 { color: #218c4a; }
+
+.upload {
+  display: block;
+  border: 2px dashed #4caf50;
+  padding: 30px;
+  border-radius: 15px;
+  background: #f4fff5;
+  cursor: pointer;
+}
+
+.upload div { font-size: 50px; }
+
+input { display: none; }
+
+img {
+  display: none;
+  max-width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+  margin: 20px auto;
+  border-radius: 12px;
+}
+
+button {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 10px;
+  margin-top: 12px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+#uploadBtn {
+  background: #219653;
+  color: white;
+}
+
+#detectBtn {
+  background: #ff9800;
+  color: white;
+}
+
+button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+#status {
+  margin: 15px;
+  color: #666;
+}
+
+#result {
+  text-align: left;
+  margin-top: 20px;
+}
+
+.best {
+  background: #e8f5e9;
+  padding: 18px;
+  border-radius: 12px;
+  text-align: center;
+  color: #176b36;
+}
+
+.item {
+  background: #f3f6f3;
+  padding: 12px;
+  margin-top: 10px;
+  border-radius: 10px;
+}
+
+.bar {
+  height: 10px;
+  background: #ddd;
+  border-radius: 10px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  background: #28a745;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>🍎 AI Fruit Detector</h1>
+<p>ระบบตรวจจับผลไม้ด้วยปัญญาประดิษฐ์</p>
+
+<label class="upload" for="file">
+  <div>📸</div>
+  <h3>เลือกภาพผลไม้</h3>
+  <p>รองรับ JPG / PNG / WEBP</p>
+  <small>เลือกได้ครั้งละ 1 ภาพ</small>
+</label>
+
+<input type="file" id="file" accept="image/*">
+
+<img id="preview" alt="ภาพที่เลือก">
+
+<button id="uploadBtn" disabled>
+  📤 Upload Image
+</button>
+
+<button id="detectBtn" disabled>
+  🔍 ตรวจจับผลไม้ด้วย AI
+</button>
+
+<div id="status">กำลังเตรียมระบบ AI...</div>
+
+<div id="result"></div>
+
+</div>
+
+<script>
+
+// 1. ใส่ URL โมเดล Teachable Machine ของคุณ
+const MODEL_URL =
+"https://teachablemachine.withgoogle.com/models/ใส่รหัสโมเดลของคุณ/";
+
+let model = null;
+let uploaded = false;
+
+const fileInput = document.getElementById("file");
+const preview = document.getElementById("preview");
+const uploadBtn = document.getElementById("uploadBtn");
+const detectBtn = document.getElementById("detectBtn");
+const statusText = document.getElementById("status");
+const result = document.getElementById("result");
+
+// 2. โหลด AI Model
+async function loadAI() {
+  try {
+    statusText.innerText = "⏳ กำลังโหลดโมเดล AI...";
+
+    model = await tmImage.load(
+      MODEL_URL + "model.json",
+      MODEL_URL + "metadata.json"
+    );
+
+    statusText.innerText = "✅ AI พร้อมใช้งาน";
+
+  } catch (error) {
+    console.error(error);
+    statusText.innerText =
+      "❌ โหลด AI ไม่สำเร็จ ตรวจสอบ URL โมเดล";
+  }
+}
+
+// 3. เลือกรูปภาพ
+fileInput.addEventListener("change", function() {
+
+  const file = fileInput.files[0];
+
+  uploaded = false;
+  uploadBtn.disabled = true;
+  detectBtn.disabled = true;
+  result.innerHTML = "";
+
+  if (!file) return;
+
+  if (!file.type.startsWith("image/")) {
+    alert("กรุณาเลือกไฟล์ภาพ");
+    fileInput.value = "";
+    return;
+  }
+
+  const imageURL = window.URL.createObjectURL(file);
+
+  preview.onload = function() {
+    preview.style.display = "block";
+    uploadBtn.disabled = false;
+    statusText.innerText = "เลือกรูปภาพสำเร็จ";
+  };
+
+  preview.onerror = function() {
+    statusText.innerText = "❌ เปิดรูปภาพไม่สำเร็จ";
+  };
+
+  preview.src = imageURL;
+});
+
+// 4. Upload รูปภาพ
+uploadBtn.addEventListener("click", function() {
+
+  if (!fileInput.files.length) {
+    alert("กรุณาเลือกภาพก่อน");
+    return;
+  }
+
+  if (!preview.complete || !preview.naturalWidth) {
+    alert("กรุณารอให้ภาพโหลดเสร็จ");
+    return;
+  }
+
+  uploaded = true;
+  detectBtn.disabled = false;
+
+  statusText.innerText =
+    "✅ Upload สำเร็จ พร้อมตรวจจับ";
+});
+
+// 5. AI วิเคราะห์รูปภาพจริง
+detectBtn.addEventListener("click", async function() {
+
+  if (!model) {
+    alert("AI ยังโหลดไม่เสร็จ");
+    return;
+  }
+
+  if (!uploaded) {
+    alert("กรุณา Upload ภาพก่อน");
+    return;
+  }
+
+  detectBtn.disabled = true;
+  statusText.innerText = "🔍 AI กำลังวิเคราะห์ภาพ...";
+
+  try {
+
+    const predictions = await model.predict(preview);
+
+    predictions.sort((a,b) =>
+      b.probability - a.probability
+    );
+
+    const best = predictions[0];
+    const confidence =
+      (best.probability * 100).toFixed(2);
+
+    let html = `
+      <div class="best">
+        <h2>🏆 ผลการตรวจจับ</h2>
+        <h1>${best.className}</h1>
+        <h2>${confidence}%</h2>
+        <p>ผลลัพธ์ที่ AI ทำนายได้สูงสุด</p>
+      </div>
+      <h3>คะแนนทุกประเภท</h3>
+    `;
+
+    predictions.forEach(item => {
+
+      const percent =
+        (item.probability * 100).toFixed(2);
+
+      html += `
+        <div class="item">
+          <strong>${item.className}</strong>
+          <span style="float:right">${percent}%</span>
+          <div class="bar">
+            <div class="fill"
+              style="width:${percent}%">
+            </div>
+          </div>
+        </div>
+      `;
+    });
+
+    result.innerHTML = html;
+
+    statusText.innerText = "✅ วิเคราะห์เสร็จแล้ว";
+
+  } catch(error) {
+
+    console.error(error);
+    statusText.innerText =
+      "❌ วิเคราะห์ไม่สำเร็จ";
+
+  } finally {
+    detectBtn.disabled = false;
+  }
+});
+
+// เริ่มต้นระบบ
+loadAI();
+
+</script>
+
+</body>
+</html>
